@@ -10,6 +10,24 @@ struct blk_desc;
 struct disk_partition;
 
 /**
+ * board_fastboot_mmc_flash_write_setup() - authorize an MMC flash target
+ *
+ * Boards may override this hook to enforce a partition allowlist. It runs
+ * before raw-device, GPT, MBR, boot-hardware-partition, and named-partition
+ * handling.
+ *
+ * Return: 0 to allow the write, or a negative error to reject it.
+ */
+int board_fastboot_mmc_flash_write_setup(const char *name);
+
+/**
+ * board_fastboot_mmc_erase_setup() - authorize an MMC erase target
+ *
+ * Return: 0 to allow the erase, or a negative error to reject it.
+ */
+int board_fastboot_mmc_erase_setup(const char *name);
+
+/**
  * fastboot_mmc_get_part_info() - Lookup eMMC partion by name
  *
  * @part_name: Named partition to lookup

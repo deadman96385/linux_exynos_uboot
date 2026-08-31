@@ -253,9 +253,9 @@ static int exynos_fastboot_setup(void)
 {
 	struct blk_desc *blk_dev;
 	struct disk_partition info = {0};
-	char buf[128];
 	phys_addr_t addr;
-	int offset, i, j;
+	bool boot_found = false, userdata_found = false;
+	int i;
 
 	/* Allocate and define buffer address for fastboot interface. */
 	if (lmb_alloc(CONFIG_FASTBOOT_BUF_SIZE, &addr)) {
@@ -270,28 +270,29 @@ static int exynos_fastboot_setup(void)
 		return -ENODEV;
 	}
 
-	strcpy(buf, "fastboot_partition_alias_");
-	offset = strlen(buf);
-
 	for (i = 1; i < CONFIG_EFI_PARTITION_ENTRIES_NUMBERS; i++) {
 		if (part_get_info(blk_dev, i, &info))
 			continue;
 
-		/*
-		 * The partition name must be lowercase (stored in buf[]),
-		 * as is expected in all fastboot partitions ...
-		 */
-		strlcpy(buf + offset, info.name, sizeof(buf) - offset);
-		for (j = offset; buf[j]; j++)
-			buf[j] = tolower(buf[j]);
-		if (!strcmp(buf + offset, info.name))
-			continue;
-		/*
-		 * ... However, if that isn't the case, a fastboot
-		 * partition alias must be defined to establish it.
-		 */
-		env_set(buf, info.name);
+		if (!strcasecmp(info.name, EXYNOS_BOOT_PARTITION)) {
+			env_set("fastboot_partition_alias_boot", info.name);
+			boot_found = true;
+		}
+
+		if (!strcasecmp(info.name, EXYNOS_USERDATA_PARTITION)) {
+			env_set("fastboot_partition_alias_userdata", info.name);
+			userdata_found = true;
+		}
 	}
+
+	if (!boot_found || !userdata_found) {
+		log_err("%s: required BOOT/USERDATA partition aliases missing\n",
+			__func__);
+		return -ENOENT;
+	}
+
+	/* Expose the fixed policy as a read-only fastboot getvar. */
+	env_set("fastboot.partition-allowlist", "boot,userdata");
 
 	return 0;
 }
@@ -383,6 +384,24 @@ static int exynos7870_command_mode_video_handoff(void)
 	env_set("fastboot.display-handoff", "command-mode-active");
 
 	return 0;
+}
+
+int board_fastboot_mmc_flash_write_setup(const char *name)
+{
+	if (!name)
+		return -EINVAL;
+
+	if (!strcasecmp(name, EXYNOS_BOOT_PARTITION) ||
+	    !strcasecmp(name, EXYNOS_USERDATA_PARTITION))
+		return 0;
+
+	return -EPERM;
+}
+
+int board_fastboot_mmc_erase_setup(const char *name)
+{
+	/* Deployment uses sparse/raw writes; destructive erase is unnecessary. */
+	return -EPERM;
 }
 
 int board_fdt_blob_setup(void **fdtp)
