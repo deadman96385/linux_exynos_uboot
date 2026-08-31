@@ -9,6 +9,7 @@
 #include <linux/linkage.h>
 #include <asm/macro.h>
 #include <asm/armv8/mmu.h>
+#include <asm/j7y17lte-early-marker.h>
 
 /*************************************************************************
  *
@@ -53,10 +54,12 @@ _bss_end_ofs:
 	.quad	__bss_end - _start
 
 reset:
+	j7y17lte_mark 0x3052		/* R0: reset vector */
 	/* Allow the board to save important registers */
 	b	save_boot_params
 .globl	save_boot_params_ret
 save_boot_params_ret:
+	j7y17lte_mark 0x3152		/* R1: boot parameters saved */
 
 #if CONFIG_POSITION_INDEPENDENT && !defined(CONFIG_XPL_BUILD)
 	/* Verify that we're 4K aligned.  */
@@ -75,6 +78,7 @@ save_boot_params_ret:
 	wfi
 	b	0b
 1:
+	j7y17lte_mark 0x3050		/* P0: runtime address is aligned */
 
 	/*
 	 * Fix .rela.dyn relocations. This allows U-Boot to be loaded to and
@@ -102,6 +106,7 @@ pie_skip_reloc:
 	cmp	x2, x3
 	b.lo	pie_fix_loop
 pie_fixup_done:
+	j7y17lte_mark 0x3150		/* P1: PIE relocations fixed */
 #endif
 
 #if defined(CONFIG_ARMV8_SPL_EXCEPTION_VECTORS) || !defined(CONFIG_XPL_BUILD)
@@ -136,7 +141,9 @@ pie_fixup_done:
 	mov	x0, #3 << 20
 	msr	cpacr_el1, x0			/* Enable FP/SIMD */
 0:
+	j7y17lte_mark 0x3045		/* E0: EL-specific setup complete */
 	msr	daifclr, #0x4			/* Unmask SError interrupts */
+	j7y17lte_mark 0x3145		/* E1: SError unmasked */
 
 #if CONFIG_COUNTER_FREQUENCY
 	branch_if_not_highest_el x0, 4f
@@ -163,6 +170,7 @@ pie_fixup_done:
 
 	/* Apply ARM core specific erratas */
 	bl	apply_core_errata
+	j7y17lte_mark 0x3041		/* A0: core errata complete */
 
 	/*
 	 * Cache/BPB/TLB Invalidate
@@ -173,6 +181,7 @@ pie_fixup_done:
 
 	/* Processor specific initialization */
 	bl	lowlevel_init
+	j7y17lte_mark 0x304c		/* L0: low-level init complete */
 
 #if defined(CONFIG_ARMV8_SPIN_TABLE) && !defined(CONFIG_XPL_BUILD)
 	branch_if_master x0, master_cpu
@@ -204,6 +213,7 @@ slave_cpu:
 	br	x0			/* branch to the given address */
 #endif /* CONFIG_ARMV8_MULTIENTRY */
 master_cpu:
+	j7y17lte_mark 0x304d		/* M0: entering crt0 */
 	msr	SPSel, #1		/* make sure we use SP_ELx */
 	bl	_main
 

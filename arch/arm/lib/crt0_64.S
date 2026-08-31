@@ -14,6 +14,7 @@
 #include <asm/macro.h>
 #include <linux/linkage.h>
 #include <system-constants.h>
+#include <asm/j7y17lte-early-marker.h>
 
 /*
  * This file handles the target-independent stages of the U-Boot
@@ -65,6 +66,7 @@
  */
 
 ENTRY(_main)
+	j7y17lte_mark 0x314d		/* M1: crt0 entered */
 
 /*
  * Set up initial C runtime environment and call board_init_f(0).
@@ -83,12 +85,15 @@ ENTRY(_main)
 	ldr	x0, =(SYS_INIT_SP_ADDR)
 #endif
 	bic	sp, x0, #0xf	/* 16-byte alignment for ABI compliance */
+	j7y17lte_mark 0x3053		/* S0: initial stack installed */
 	mov	x0, sp
 	bl	board_init_f_alloc_reserve
+	j7y17lte_mark 0x3046		/* F0: reserve allocation returned */
 	mov	sp, x0
 	/* set up gd here, outside any C code */
 	mov	x18, x0
 	bl	board_init_f_init_reserve
+	j7y17lte_mark 0x3146		/* F1: GD reserve initialized */
 
 #if defined(CONFIG_DEBUG_UART) && CONFIG_IS_ENABLED(SERIAL)
 	bl	debug_uart_init
@@ -96,6 +101,7 @@ ENTRY(_main)
 
 	mov	x0, #0
 	bl	board_init_f
+	j7y17lte_mark 0x3246		/* F2: board_init_f returned */
 
 #if !defined(CONFIG_XPL_BUILD)
 /*
@@ -132,6 +138,7 @@ ENTRY(_main)
 	b	relocate_code
 
 relocation_return:
+	j7y17lte_mark 0x3252		/* R2: code relocation returned */
 
 /*
  * Set up final (full) environment
@@ -168,6 +175,7 @@ clear_loop:
 	b.lo	clear_loop
 
 	/* call board_init_r(gd_t *id, ulong dest_addr) */
+	j7y17lte_mark 0x3042		/* B0: entering board_init_r */
 	mov	x0, x18				/* gd_t */
 	ldr	x1, [x18, #GD_RELOCADDR]	/* dest_addr */
 	b	board_init_r			/* PC relative jump */
