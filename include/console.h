@@ -65,6 +65,14 @@ void console_record_reset(void);
 int console_record_reset_enable(void);
 
 /**
+ * console_record_disable() - pause console output recording
+ *
+ * Existing buffered output is retained. Call console_record_reset_enable()
+ * after draining it to resume recording with an empty buffer.
+ */
+void console_record_disable(void);
+
+/**
  * console_record_readline() - Read a line from the console output
  *
  * This reads the next available line from the console output previously
@@ -118,6 +126,10 @@ static inline int console_record_reset_enable(void)
 {
 	/* Cannot enable it as it is not supported */
 	return -ENOSYS;
+}
+
+static inline void console_record_disable(void)
+{
 }
 
 static inline int console_record_readline(char *str, int maxlen)

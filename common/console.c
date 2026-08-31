@@ -858,6 +858,11 @@ int console_record_reset_enable(void)
 	return 0;
 }
 
+void console_record_disable(void)
+{
+	gd->flags &= ~GD_FLG_RECORD;
+}
+
 int console_record_readline(char *str, int maxlen)
 {
 	if (gd->flags & GD_FLG_RECORD_OVF)
