@@ -16,10 +16,12 @@
 #include <errno.h>
 #include <init.h>
 #include <linux/sizes.h>
+#include <linux/delay.h>
 #include <lmb.h>
 #include <part.h>
 #include <stdbool.h>
 #include <string.h>
+#include <video.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -294,6 +296,95 @@ static int exynos_fastboot_setup(void)
 	return 0;
 }
 
+#define EXYNOS7870_DECON_BASE		0x14830000UL
+#define EXYNOS7870_DECON_VIDCON0		0x0000
+#define EXYNOS7870_DECON_VIDOUTCON0	0x0004
+#define EXYNOS7870_DECON_WINCON0		0x0050
+#define EXYNOS7870_DECON_VIDTCON4	0x0620
+#define EXYNOS7870_DECON_VIDW_ADD0	0x0880
+#define EXYNOS7870_DECON_TRIGCON		0x06b0
+#define EXYNOS7870_DECON_UPDATE		0x0710
+#define EXYNOS7870_VIDCON0_ENVID		BIT(1)
+#define EXYNOS7870_VIDCON0_ENVID_F	BIT(0)
+#define EXYNOS7870_VIDOUTCON0_I80IF	BIT(23)
+#define EXYNOS7870_WINCON_ENWIN		BIT(0)
+#define EXYNOS7870_TRIGCON_HW_UNMASK	BIT(4)
+#define EXYNOS7870_UPDATE_STANDALONE	BIT(0)
+#define EXYNOS7870_VIDTCON4_J7Y17LTE	0x077f0437
+
+static int exynos7870_command_mode_video_handoff(void)
+{
+	void __iomem *decon = (void __iomem *)EXYNOS7870_DECON_BASE;
+	struct video_uc_plat *plat;
+	struct video_priv *priv;
+	struct udevice *dev;
+	u32 buf0, vidout0, wincon0;
+	int ret, timeout;
+
+	if (!of_machine_is_compatible("samsung,j7y17lte"))
+		return 0;
+
+	ret = uclass_get_device(UCLASS_VIDEO, 0, &dev);
+	if (ret)
+		return ret;
+
+	plat = dev_get_uclass_plat(dev);
+	priv = dev_get_uclass_priv(dev);
+	if (plat->base != 0x67000000 || (ulong)priv->fb != plat->base ||
+	    priv->xsize != 1080 || priv->ysize != 1920 ||
+	    priv->line_length != 1080 * 4 || priv->bpix != VIDEO_BPP32)
+		return -EINVAL;
+
+	/*
+	 * Discard the framebuffer contents inherited from diagnostic builds.
+	 * Subsequent vidconsole output is rendered as white text on black.
+	 */
+	memset(priv->fb, 0, priv->line_length * priv->ysize);
+
+	/* Flush the cleared console before asking DECON to transfer it. */
+	ret = video_sync(dev, true);
+	if (ret)
+		return ret;
+
+	vidout0 = readl(decon + EXYNOS7870_DECON_VIDOUTCON0);
+	wincon0 = readl(decon + EXYNOS7870_DECON_WINCON0);
+	buf0 = readl(decon + EXYNOS7870_DECON_VIDW_ADD0);
+
+	if (!(vidout0 & EXYNOS7870_VIDOUTCON0_I80IF) ||
+	    !(wincon0 & EXYNOS7870_WINCON_ENWIN) || buf0 != plat->base ||
+	    readl(decon + EXYNOS7870_DECON_VIDTCON4) !=
+		EXYNOS7870_VIDTCON4_J7Y17LTE)
+		return -EINVAL;
+
+	/*
+	 * Match Samsung's Exynos7870 command-mode DECON start sequence:
+	 * enable direct output, request a standalone shadow update, then
+	 * unmask the hardware trigger. The previous bootloader owns panel
+	 * initialization; this only transfers U-Boot's cache-flushed frame.
+	 */
+	setbits_le32(decon + EXYNOS7870_DECON_VIDCON0,
+		     EXYNOS7870_VIDCON0_ENVID |
+		     EXYNOS7870_VIDCON0_ENVID_F);
+	setbits_le32(decon + EXYNOS7870_DECON_UPDATE,
+		     EXYNOS7870_UPDATE_STANDALONE);
+	setbits_le32(decon + EXYNOS7870_DECON_TRIGCON,
+		     EXYNOS7870_TRIGCON_HW_UNMASK);
+
+	for (timeout = 200; timeout > 0; timeout--) {
+		if (!(readl(decon + EXYNOS7870_DECON_UPDATE) &
+		      EXYNOS7870_UPDATE_STANDALONE))
+			break;
+		udelay(1000);
+	}
+
+	if (!timeout)
+		return -ETIMEDOUT;
+
+	env_set("fastboot.display-handoff", "command-mode-active");
+
+	return 0;
+}
+
 int board_fdt_blob_setup(void **fdtp)
 {
 	/* If internal FDT is not available, use the external FDT instead. */
@@ -368,5 +459,13 @@ int misc_init_r(void)
 	if (ret)
 		return ret;
 
-	return exynos_fastboot_setup();
+	ret = exynos_fastboot_setup();
+	if (ret)
+		return ret;
+
+	ret = exynos7870_command_mode_video_handoff();
+	if (ret)
+		log_warning("command-mode video handoff failed: %d\n", ret);
+
+	return 0;
 }
