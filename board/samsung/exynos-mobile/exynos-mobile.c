@@ -6,14 +6,17 @@
  */
 
 #include <asm/armv8/mmu.h>
+#include <asm/io.h>
 #include <blk.h>
 #include <bootflow.h>
 #include <ctype.h>
+#include <dm.h>
 #include <dm/ofnode.h>
 #include <efi.h>
 #include <efi_loader.h>
 #include <env.h>
 #include <errno.h>
+#include <fastboot.h>
 #include <init.h>
 #include <linux/sizes.h>
 #include <linux/delay.h>
@@ -27,6 +30,37 @@ DECLARE_GLOBAL_DATA_PTR;
 
 #define lmb_alloc(size, addr) \
 	lmb_alloc_mem(LMB_MEM_ALLOC_ANY, SZ_2M, addr, size, LMB_NONE)
+
+#define EXYNOS_BOOT_PARTITION		"boot"
+#define EXYNOS_USERDATA_PARTITION	"userdata"
+
+#define EXYNOS7870_PMU_BASE		0x10480000UL
+#define EXYNOS7870_PMU_INFORM2		0x0808
+#define EXYNOS7870_PMU_INFORM3		0x080c
+#define EXYNOS7870_SEC_POWER_RESET	0x12345678
+#define EXYNOS7870_SEC_RECOVERY		0x12345674
+
+int fastboot_set_reboot_flag(enum fastboot_reboot_reason reason)
+{
+	void __iomem *pmu = (void __iomem *)EXYNOS7870_PMU_BASE;
+
+	if (!of_machine_is_compatible("samsung,j7y17lte") ||
+	    reason != FASTBOOT_REBOOT_REASON_RECOVERY)
+		return -ENOTSUPP;
+
+	writel(EXYNOS7870_SEC_POWER_RESET,
+	       pmu + EXYNOS7870_PMU_INFORM2);
+	writel(EXYNOS7870_SEC_RECOVERY,
+	       pmu + EXYNOS7870_PMU_INFORM3);
+
+	if (readl(pmu + EXYNOS7870_PMU_INFORM2) !=
+			EXYNOS7870_SEC_POWER_RESET ||
+	    readl(pmu + EXYNOS7870_PMU_INFORM3) !=
+			EXYNOS7870_SEC_RECOVERY)
+		return -EIO;
+
+	return 0;
+}
 
 struct efi_fw_image fw_images[] = {
 	{
@@ -207,7 +241,7 @@ static int exynos_blk_env_setup(void)
 	int blk_dev = 0;
 	struct blk_desc *blk_desc;
 	struct disk_partition info = {0};
-	unsigned long largest_part_start = 0, largest_part_size = 0;
+	unsigned long userdata_start = 0, userdata_size = 0;
 	static char dfu_string[32];
 	int i;
 
@@ -223,26 +257,26 @@ static int exynos_blk_env_setup(void)
 			continue;
 
 		if (!update_info.dfu_string &&
-		    !strncasecmp(info.name, "boot", strlen("boot"))) {
+		    !strcasecmp(info.name, EXYNOS_BOOT_PARTITION)) {
 			snprintf(dfu_string, sizeof(dfu_string),
 				 "mmc %d=u-boot.bin part %d %d", blk_dev,
 				 blk_dev, i);
 			update_info.dfu_string = dfu_string;
 		}
 
-		if (info.start > largest_part_size) {
-			largest_part_start = info.start;
-			largest_part_size = info.size;
+		if (!strcasecmp(info.name, EXYNOS_USERDATA_PARTITION)) {
+			userdata_start = info.start;
+			userdata_size = info.size;
 		}
 	}
 
-	if (largest_part_size) {
+	if (userdata_size) {
 		env_set("blkmap_blk_ifname", blk_ifname);
 		env_set_ulong("blkmap_blk_dev", blk_dev);
-		env_set_ulong("blkmap_blk_nr", largest_part_start);
-		env_set_hex("blkmap_size_r", largest_part_size);
+		env_set_ulong("blkmap_blk_nr", userdata_start);
+		env_set_hex("blkmap_size_r", userdata_size);
 	} else {
-		log_warning("%s: no qualified partition for blkmap, skipping\n",
+		log_warning("%s: USERDATA partition not found, skipping blkmap\n",
 			    __func__);
 	}
 

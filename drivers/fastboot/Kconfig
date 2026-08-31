@@ -285,6 +285,12 @@ config FASTBOOT_CMD_OEM_CONSOLE
 	  Add support for the "oem console" command to input and read console
 	  record buffer.
 
+config FASTBOOT_CMD_OEM_RECOVERY
+	bool "Enable the 'oem recovery' command"
+	help
+	  Add an OEM alias that sets the board recovery reboot reason and resets
+	  after the successful fastboot response has reached the host.
+
 config FASTBOOT_OEM_BOARD
 	bool "Enable the 'oem board' command"
 	help
