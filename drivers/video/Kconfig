@@ -51,6 +51,14 @@ config VIDEO_FONT_16X32
 	  Provides character bitmap data in header file.
 	  When selecting multiple fonts, you may want to enable CMD_SELECT_FONT too.
 
+config VIDEO_FONT_32X64
+	bool "32 x 64 font size"
+	help
+	  Double-sized Terminus font for high-density phone displays. Each
+	  16 x 32 source pixel is expanded to a 2 x 2 block, keeping the fixed
+	  bitmap console deterministic and avoiding floating-point rendering.
+	  When selecting multiple fonts, you may want to enable CMD_SELECT_FONT too.
+
 config VIDEO_LOGO
 	bool "Show the U-Boot logo on the display"
 	default y if !SPLASH_SCREEN
