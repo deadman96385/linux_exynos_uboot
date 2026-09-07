@@ -598,6 +598,43 @@ static int run_main_loop(void)
  * TODO: perhaps reset the watchdog in the initcall function after each call?
  */
 
+#ifdef J7Y17LTE_EARLY_MARKERS
+static unsigned int j7y17lte_initcall_index;
+
+static void j7y17lte_mark_initcall(void)
+{
+	static const char hex[] = "0123456789ABCDEF";
+	volatile unsigned char *stage = (void *)0x46e00040;
+	unsigned int index = j7y17lte_initcall_index++;
+
+	stage[0] = hex[(index >> 4) & 0xf];
+	stage[1] = hex[index & 0xf];
+	__asm__ volatile("dsb sy" : : : "memory");
+}
+
+#undef INITCALL
+#define INITCALL(_call) \
+	do { \
+		j7y17lte_mark_initcall(); \
+		if (_call()) { \
+			printf("%s(): initcall %s() failed\n", __func__, \
+			       #_call); \
+			hang(); \
+		} \
+	} while (0)
+
+#undef INITCALL_EVT
+#define INITCALL_EVT(_evt) \
+	do { \
+		j7y17lte_mark_initcall(); \
+		if (event_notify_null(_evt)) { \
+			printf("%s(): event %d/%s failed\n", __func__, _evt, \
+			       event_type_name(_evt)); \
+			hang(); \
+		} \
+	} while (0)
+#endif
+
 static void initcall_run_r(void)
 {
 	/*
