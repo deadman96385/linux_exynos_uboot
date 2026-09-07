@@ -21,6 +21,12 @@
 #if defined(CONFIG_VIDEO_FONT_16X32)
 #include <video_font_ter16x32.h>
 #endif
+#if defined(CONFIG_VIDEO_FONT_24X48)
+#include <video_font_ter24x48.h>
+#endif
+#if defined(CONFIG_VIDEO_FONT_32X64)
+#include <video_font_ter32x64.h>
+#endif
 
 static struct video_fontdata __maybe_unused fonts[] = {
 #if defined(CONFIG_VIDEO_FONT_8X16)
@@ -34,6 +40,12 @@ static struct video_fontdata __maybe_unused fonts[] = {
 #endif
 #if defined(CONFIG_VIDEO_FONT_16X32)
 	FONT_ENTRY(16, 32, 16x32),
+#endif
+#if defined(CONFIG_VIDEO_FONT_24X48)
+	FONT_ENTRY(24, 48, 24x48),
+#endif
+#if defined(CONFIG_VIDEO_FONT_32X64)
+	FONT_ENTRY(32, 64, 32x64),
 #endif
 	{/* list terminator */}
 };
