@@ -2,4 +2,4 @@
 #
 # Copyright (C) 2025 Kaustabh Chakraborty <kauschluss@disroot.org>
 
-obj-y := exynos-mobile.o
+obj-y := exynos-mobile.o j7y17lte-panel-diagnostic.o

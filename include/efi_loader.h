@@ -683,6 +683,7 @@ int efi_disk_create_partitions(efi_handle_t parent, struct blk_desc *desc,
 			       const char *pdevname);
 /* Called by bootefi to make GOP (graphical) interface available */
 efi_status_t efi_gop_register(void);
+bool efi_gop_register_allowed(void);
 /* Called by bootefi to make the network interface available */
 efi_status_t efi_net_register(struct udevice *dev);
 efi_status_t efi_net_do_start(struct udevice *dev);

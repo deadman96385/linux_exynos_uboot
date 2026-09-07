@@ -30,6 +30,11 @@ void __weak allow_unaligned(void)
 {
 }
 
+bool __weak efi_gop_register_allowed(void)
+{
+	return true;
+}
+
 /**
  * efi_init_platform_lang() - define supported languages
  *
@@ -349,7 +354,7 @@ efi_status_t efi_init_obj_list(void)
 			goto out;
 	}
 
-	if (IS_ENABLED(CONFIG_VIDEO)) {
+	if (IS_ENABLED(CONFIG_VIDEO) && efi_gop_register_allowed()) {
 		ret = efi_gop_register();
 		if (ret != EFI_SUCCESS)
 			goto out;
