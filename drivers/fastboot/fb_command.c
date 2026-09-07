@@ -116,6 +116,10 @@ static const struct {
 		.command = "oem console",
 		.dispatch = CONFIG_IS_ENABLED(FASTBOOT_CMD_OEM_CONSOLE, (oem_console), (NULL))
 	},
+	[FASTBOOT_COMMAND_OEM_RECOVERY] = {
+		.command = "oem recovery",
+		.dispatch = CONFIG_IS_ENABLED(FASTBOOT_CMD_OEM_RECOVERY, (reboot_recovery), (NULL))
+	},
 	[FASTBOOT_COMMAND_OEM_BOARD] = {
 		.command = "oem board",
 		.dispatch = CONFIG_IS_ENABLED(FASTBOOT_OEM_BOARD, (oem_board), (NULL))
@@ -176,7 +180,7 @@ void fastboot_multiresponse(int cmd, char *response)
 			char buf[FASTBOOT_RESPONSE_LEN] = { 0 };
 
 			if (console_record_isempty()) {
-				console_record_reset();
+				console_record_reset_enable();
 				fastboot_okay(NULL, response);
 			} else {
 				int ret = console_record_readline(buf, sizeof(buf) - 5);
@@ -561,8 +565,11 @@ static void __maybe_unused oem_console(char *cmd_parameter, char *response)
 
 	if (console_record_isempty())
 		fastboot_fail("Empty console", response);
-	else
+	else {
+		/* USB transmit diagnostics must not refill the buffer being drained. */
+		console_record_disable();
 		fastboot_response(FASTBOOT_MULTIRESPONSE_START, response, NULL);
+	}
 }
 
 /**

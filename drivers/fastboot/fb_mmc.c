@@ -21,6 +21,16 @@
 
 #define BOOT_PARTITION_NAME "boot"
 
+__weak int board_fastboot_mmc_flash_write_setup(const char *name)
+{
+	return 0;
+}
+
+__weak int board_fastboot_mmc_erase_setup(const char *name)
+{
+	return 0;
+}
+
 static int raw_part_get_info_by_name(struct blk_desc *dev_desc,
 				     const char *name,
 				     struct disk_partition *info)
@@ -370,6 +380,11 @@ void fastboot_mmc_flash_write(const char *cmd, void *download_buffer,
 	struct blk_desc *dev_desc;
 	struct disk_partition info = {0};
 
+	if (board_fastboot_mmc_flash_write_setup(cmd)) {
+		fastboot_fail("partition write denied by board policy", response);
+		return;
+	}
+
 #ifdef CONFIG_FASTBOOT_MMC_BOOT_SUPPORT
 	if (strcmp(cmd, CONFIG_FASTBOOT_MMC_BOOT1_NAME) == 0) {
 		dev_desc = fastboot_mmc_get_dev(response);
@@ -486,6 +501,11 @@ void fastboot_mmc_erase(const char *cmd, char *response)
 	struct blk_desc *dev_desc;
 	struct disk_partition info;
 	struct mmc *mmc = find_mmc_device(CONFIG_FASTBOOT_FLASH_MMC_DEV);
+
+	if (board_fastboot_mmc_erase_setup(cmd)) {
+		fastboot_fail("partition erase denied by board policy", response);
+		return;
+	}
 
 #ifdef CONFIG_FASTBOOT_MMC_BOOT_SUPPORT
 	if (strcmp(cmd, CONFIG_FASTBOOT_MMC_BOOT1_NAME) == 0) {

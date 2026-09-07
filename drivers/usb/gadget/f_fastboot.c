@@ -21,6 +21,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/usb/composite.h>
 #include <linux/compiler.h>
+#include <linux/delay.h>
 #include <g_dnl.h>
 
 #define FASTBOOT_INTERFACE_CLASS	0xff
@@ -421,6 +422,8 @@ static int fastboot_tx_write_str(const char *buffer)
 
 static void compl_do_reset(struct usb_ep *ep, struct usb_request *req)
 {
+	/* Let the host consume the final OKAY before disconnecting the gadget. */
+	mdelay(100);
 	g_dnl_unregister();
 	do_reset(NULL, 0, 0, NULL);
 }
@@ -571,6 +574,7 @@ static void rx_handler_command(struct usb_ep *ep, struct usb_request *req)
 		case FASTBOOT_COMMAND_REBOOT_BOOTLOADER:
 		case FASTBOOT_COMMAND_REBOOT_FASTBOOTD:
 		case FASTBOOT_COMMAND_REBOOT_RECOVERY:
+		case FASTBOOT_COMMAND_OEM_RECOVERY:
 			fastboot_func->in_req->complete = compl_do_reset;
 			break;
 		case FASTBOOT_COMMAND_ACMD:
