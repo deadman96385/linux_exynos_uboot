@@ -517,7 +517,7 @@ void fdt_fixup_pstore(void *blob)
 	fdt_setprop_empty(blob, nodeoffset, "ranges");
 
 	sprintf(node, "ramoops@%llx", (unsigned long long)pstore_addr);
-	nodeoffset = fdt_add_subnode(blob, nodeoffset, node);
+	nodeoffset = fdt_find_or_add_subnode(blob, nodeoffset, node);
 	if (nodeoffset < 0) {
 		log_err("Add '%s' node failed: %s\n", node, fdt_strerror(nodeoffset));
 		return;
@@ -549,6 +549,8 @@ void fdt_fixup_pstore(void *blob)
 	fdt_setprop_u32(blob, nodeoffset, "ftrace-size", pstore_ftrace_size);
 	fdt_setprop_u32(blob, nodeoffset, "pmsg-size", pstore_pmsg_size);
 	fdt_setprop_u32(blob, nodeoffset, "ecc-size", pstore_ecc_size);
+
+	return;
 
 clean_ramoops:
 	fdt_del_node_and_alias(blob, node);
