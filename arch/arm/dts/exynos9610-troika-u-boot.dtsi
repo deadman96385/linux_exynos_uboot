@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2026 Sean Hoyt <seanhoyt963@gmail.com>
+ *
+ * simplefb framebuffer address/resolution match uniLoader's own
+ * board-troika.c and the roadmap doc's already-verified facts: the
+ * bootloader_fb reserved-memory carveout at 0xec000000 (read live from
+ * this device's own /sys/firmware/devicetree/base/reserved-memory/
+ * bootloader_fb), Motorola One Action's 1080x2520 21:9 panel.
+ */
+
+/ {
+	model_info-chip = <9610>;
+	model_info-hw_rev = <0>;
+	model_info-hw_rev_end = <255>;
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <1>;
+		ranges;
+
+		framebuffer@ec000000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0xec000000 (1080 * 2520 * 4)>;
+			width = <1080>;
+			height = <2520>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+		};
+	};
+};

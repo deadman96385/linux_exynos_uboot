@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * Samsung Exynos 9610 SoC device tree source (U-Boot)
+ *
+ * Copyright (c) 2026 Sean Hoyt <seanhoyt963@gmail.com>
+ *
+ * A separate, U-Boot-specific tree from the Linux kernel's
+ * exynos9610.dtsi, not a copy of it -- kept minimal to exactly what
+ * U-Boot's own drivers need (console + volume-down button + framebuffer),
+ * not a port of Linux's fuller node set. In particular the clock IDs
+ * here are NOT the same numbers as Linux's dt-bindings/clock/
+ * samsung,exynos9610.h: U-Boot's samsung_register_cmu() framework packs
+ * a per-CMU local id (0-255) rather than Linux's one flat global id
+ * space (see samsung,exynos9610-cmu.h), so reusing Linux's numbers here
+ * would silently resolve to the wrong clock.
+ *
+ * Register bases/UART details/pinmux are the same already-verified
+ * facts as the Linux dtsi (see clk-exynos9610.c and pinctrl-exynos9610.c
+ * for the full trail): CMU_PERI @ 0x10030000, UART0 @ 0x13820000,
+ * ALIVE pinctrl @ 0x11850000, gpq0 (uart0_bus) and gpa1 (volume-down)
+ * banks. No GIC/interrupt-controller node -- U-Boot's serial/gpio/pwm
+ * drivers here are all polled, none of them need one.
+ */
+
+#include <dt-bindings/clock/samsung,exynos9610-cmu.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/linux-event-codes.h>
+
+/ {
+	compatible = "samsung,exynos9610";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	aliases {
+		pinctrl0 = &pinctrl_alive;
+		serial0 = &serial_0;
+	};
+
+	oscclk: osc-clock {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-output-names = "oscclk";
+		clock-frequency = <26000000>;
+	};
+
+	chipid@10000000 {
+		compatible = "samsung,exynos9610-chipid",
+			     "samsung,exynos850-chipid";
+		reg = <0x10000000 0x100>;
+	};
+
+	cmu_peri: clock-controller@10030000 {
+		compatible = "samsung,exynos9610-cmu-peri";
+		reg = <0x10030000 0x8000>;
+		#clock-cells = <1>;
+	};
+
+	pinctrl_alive: pinctrl@11850000 {
+		compatible = "samsung,exynos9610-pinctrl";
+		reg = <0x11850000 0x1000>;
+	};
+
+	serial_0: serial@13820000 {
+		compatible = "samsung,exynos8895-uart";
+		reg = <0x13820000 0x100>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&uart0_bus>;
+		samsung,uart-fifosize = <256>;
+		clocks = <&cmu_peri CLK_GOUT_PERI_UART_IPCLK>,
+			 <&cmu_peri CLK_GOUT_PERI_UART_IPCLK>;
+		clock-names = "uart", "clk_uart_baud0";
+		u-boot,dm-pre-reloc;
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		label = "GPIO Keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_voldown>;
+
+		key-voldown {
+			label = "Volume Down Key";
+			gpios = <&gpa1 6 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEDOWN>;
+		};
+	};
+};
+
+#include "exynos9610-pinctrl.dtsi"

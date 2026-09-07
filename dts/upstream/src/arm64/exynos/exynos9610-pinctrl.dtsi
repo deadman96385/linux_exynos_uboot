@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * Samsung's Exynos9610 SoC pin-mux and pin-config device tree source (U-Boot)
+ *
+ * Copyright (c) 2026 Sean Hoyt <seanhoyt963@gmail.com>
+ *
+ * uart0_bus (gpq0-3/gpq0-4, function 2) is from downstream's
+ * exynos9610-pinctrl.dtsi. key_voldown (gpa1-6) is confirmed live on
+ * real troika hardware: /sys/firmware/devicetree/base/pinctrl@11850000/
+ * key-voldown has samsung,pins = "gpa1-6", and gpa1's own phandle
+ * matches the live gpio_keys node's volume-down button gpios reference.
+ * Function value <0xf> for the key mux matches this same live node's
+ * gpios flags field (0xf); pull is left unconfigured since the live
+ * node doesn't expose samsung,pin-pud on this group either.
+ */
+
+&pinctrl_alive {
+	gpa1: gpa1-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	gpq0: gpq0-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	uart0_bus: uart0-bus {
+		samsung,pins = "gpq0-3", "gpq0-4";
+		samsung,pin-function = <2>;
+		samsung,pin-pud = <0>;
+	};
+
+	key_voldown: key-voldown {
+		samsung,pins = "gpa1-6";
+		samsung,pin-function = <0>;
+	};
+};

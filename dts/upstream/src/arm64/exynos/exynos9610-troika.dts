@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * Motorola One Action (troika) device tree source (U-Boot)
+ *
+ * Copyright (c) 2026 Sean Hoyt <seanhoyt963@gmail.com>
+ */
+
+/dts-v1/;
+#include "exynos9610.dtsi"
+
+/ {
+	model = "Motorola One Action";
+	compatible = "motorola,troika", "samsung,exynos9610";
+
+	/*
+	 * Sub-4GB banks only (0x80000000-0xdfffffff, from this device's own
+	 * /proc/iomem "System RAM" ranges) -- U-Boot doesn't need the full
+	 * memory map the Linux dtsi exposes, and a >4GB bank wouldn't fit
+	 * in this file's #address-cells = <1> anyway.
+	 */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x3c800000>,
+		      <0xc0000000 0x20000000>,
+		      <0xe0d00000 0x1f300000>;
+	};
+};
+
+&serial_0 {
+	status = "okay";
+};
