@@ -247,12 +247,15 @@ static void _serial_putc(struct udevice *dev, char ch)
 {
 	struct dm_serial_ops *ops = serial_get_ops(dev);
 	int err;
+	int timeout = 10000;
 
 	if (ch == '\n')
 		_serial_putc(dev, '\r');
 
 	do {
 		err = ops->putc(dev, ch);
+		if (!--timeout)
+			break;
 	} while (err == -EAGAIN);
 
 	if (IS_ENABLED(CONFIG_CONSOLE_FLUSH_ON_NEWLINE) && ch == '\n')

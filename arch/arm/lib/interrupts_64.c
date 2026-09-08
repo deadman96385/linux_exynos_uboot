@@ -140,11 +140,39 @@ static bool smh_emulate_trap(struct pt_regs *regs)
 	return true;
 }
 
+static void exynos_draw_exception(const char *name, struct pt_regs *pt_regs)
+{
+	extern void exynos_draw_text(int x0, int y0, const char *str, unsigned int fg, unsigned int bg);
+	char buf[64];
+	unsigned long el, far = 0;
+
+	asm("mrs %0, CurrentEl": "=r" (el));
+	if ((el >> 2) == 1)
+		asm("mrs %0, FAR_EL1": "=r" (far));
+	else if ((el >> 2) == 2)
+		asm("mrs %0, FAR_EL2": "=r" (far));
+
+	exynos_draw_text(30, 160, name, 0x00FF3333, 0x00000000);
+
+	snprintf(buf, sizeof(buf), "ESR: 0x%08lx", (unsigned long)pt_regs->esr);
+	exynos_draw_text(30, 240, buf, 0x00FFFF00, 0x00000000);
+
+	snprintf(buf, sizeof(buf), "FAR: 0x%016lx", (unsigned long)far);
+	exynos_draw_text(30, 320, buf, 0x00FFFF00, 0x00000000);
+
+	snprintf(buf, sizeof(buf), "ELR: 0x%016lx", (unsigned long)pt_regs->elr);
+	exynos_draw_text(30, 400, buf, 0x0000FFFF, 0x00000000);
+
+	snprintf(buf, sizeof(buf), "OFF: 0x%08lx", (unsigned long)(pt_regs->elr - gd->reloc_off));
+	exynos_draw_text(30, 480, buf, 0x0000FFFF, 0x00000000);
+}
+
 /*
  * do_bad_sync handles the impossible case in the Synchronous Abort vector.
  */
 void do_bad_sync(struct pt_regs *pt_regs)
 {
+	exynos_draw_exception("EXCEPTION: BAD SYNC", pt_regs);
 	efi_restore_gd();
 	printf("Bad mode in \"Synchronous Abort\" handler, esr 0x%08lx\n",
 	       pt_regs->esr);
@@ -182,6 +210,7 @@ void do_bad_fiq(struct pt_regs *pt_regs)
  */
 void do_bad_error(struct pt_regs *pt_regs)
 {
+	exynos_draw_exception("EXCEPTION: BAD ERROR", pt_regs);
 	efi_restore_gd();
 	printf("Bad mode in \"Error\" handler, esr 0x%08lx\n", pt_regs->esr);
 	show_regs(pt_regs);
@@ -197,6 +226,7 @@ void do_sync(struct pt_regs *pt_regs)
 	if (CONFIG_IS_ENABLED(SEMIHOSTING_FALLBACK) &&
 	    smh_emulate_trap(pt_regs))
 		return;
+	exynos_draw_exception("EXCEPTION: SYNC ABORT", pt_regs);
 	efi_restore_gd();
 	printf("\"Synchronous Abort\" handler, esr 0x%08lx", pt_regs->esr);
 	dump_far(pt_regs->esr);
@@ -238,6 +268,7 @@ void do_fiq(struct pt_regs *pt_regs)
  */
 void __weak do_error(struct pt_regs *pt_regs)
 {
+	exynos_draw_exception("EXCEPTION: CPU ERROR", pt_regs);
 	efi_restore_gd();
 	printf("\"Error\" handler, esr 0x%08lx\n", pt_regs->esr);
 	show_regs(pt_regs);

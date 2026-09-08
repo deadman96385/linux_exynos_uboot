@@ -58,4 +58,5 @@ U_BOOT_DRIVER(pinctrl_exynos9610) = {
 	.ops		= &exynos9610_pinctrl_ops,
 	.probe		= exynos_pinctrl_probe,
 	.bind		= exynos_pinctrl_bind,
+	.flags		= DM_FLAG_PRE_RELOC,
 };

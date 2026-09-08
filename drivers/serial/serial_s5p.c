@@ -189,8 +189,12 @@ static int s5p_serial_putc(struct udevice *dev, const char ch)
 {
 	struct s5p_serial_plat *plat = dev_get_plat(dev);
 	struct s5p_uart *const uart = plat->reg;
+	u32 ufstat = readl(&uart->ufstat);
 
-	if (readl(&uart->ufstat) & plat->tx_fifo_full)
+	if (ufstat == 0xffffffff)
+		return 0; /* Hardware unclocked / disconnected: do not hang */
+
+	if (ufstat & plat->tx_fifo_full)
 		return -EAGAIN;
 
 	if (plat->reg_width == 4)

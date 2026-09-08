@@ -25,6 +25,12 @@
 #include <stdbool.h>
 #include <string.h>
 #include <video.h>
+#if IS_ENABLED(CONFIG_UFS)
+#include <ufs.h>
+#endif
+#if IS_ENABLED(CONFIG_SCSI)
+#include <scsi.h>
+#endif
 
 #include "j7y17lte-panel-diagnostic.h"
 
@@ -42,14 +48,35 @@ DECLARE_GLOBAL_DATA_PTR;
 #define EXYNOS7870_SEC_POWER_RESET	0x12345678
 #define EXYNOS7870_SEC_RECOVERY		0x12345674
 
+#define EXYNOS9610_PMU_BASE		0x11860000UL
+#define EXYNOS9610_PMU_SYSIP_DAT3	0x081c
+#define MOTOROLA_REBOOT_FASTBOOT	0x77665500
+#define MOTOROLA_REBOOT_RECOVERY	0x77665502
+
 int fastboot_set_reboot_flag(enum fastboot_reboot_reason reason)
 {
-	void __iomem *pmu = (void __iomem *)EXYNOS7870_PMU_BASE;
+	void __iomem *pmu;
+
+	if (of_machine_is_compatible("motorola,troika")) {
+		pmu = (void __iomem *)EXYNOS9610_PMU_BASE;
+		if (reason == FASTBOOT_REBOOT_REASON_BOOTLOADER) {
+			writel(MOTOROLA_REBOOT_FASTBOOT,
+			       pmu + EXYNOS9610_PMU_SYSIP_DAT3);
+		} else if (reason == FASTBOOT_REBOOT_REASON_RECOVERY ||
+			   reason == FASTBOOT_REBOOT_REASON_FASTBOOTD) {
+			writel(MOTOROLA_REBOOT_RECOVERY,
+			       pmu + EXYNOS9610_PMU_SYSIP_DAT3);
+		} else {
+			return -ENOTSUPP;
+		}
+		return 0;
+	}
 
 	if (!of_machine_is_compatible("samsung,j7y17lte") ||
 	    reason != FASTBOOT_REBOOT_REASON_RECOVERY)
 		return -ENOTSUPP;
 
+	pmu = (void __iomem *)EXYNOS7870_PMU_BASE;
 	writel(EXYNOS7870_SEC_POWER_RESET,
 	       pmu + EXYNOS7870_PMU_INFORM2);
 	writel(EXYNOS7870_SEC_RECOVERY,
@@ -260,7 +287,20 @@ static int exynos_blk_env_setup(void)
 	blk_ifname = "mmc";
 	blk_desc = blk_get_dev(blk_ifname, blk_dev);
 	if (!blk_desc) {
-		log_warning("%s: mmc device not available, skipping blkmap setup\n",
+#if IS_ENABLED(CONFIG_UFS)
+		int ufs_ret = ufs_probe();
+		printf("exynos_blk_env_setup: ufs_probe() = %d\n", ufs_ret);
+#endif
+#if IS_ENABLED(CONFIG_SCSI)
+		int scsi_ret = scsi_scan(true);
+		printf("exynos_blk_env_setup: scsi_scan() = %d\n", scsi_ret);
+#endif
+		blk_ifname = "scsi";
+		blk_desc = blk_get_dev(blk_ifname, blk_dev);
+		printf("exynos_blk_env_setup: blk_get_dev(scsi, 0) = %p\n", blk_desc);
+	}
+	if (!blk_desc) {
+		log_warning("%s: storage device not available, skipping blkmap setup\n",
 			    __func__);
 		return 0;
 	}
@@ -270,10 +310,12 @@ static int exynos_blk_env_setup(void)
 			continue;
 
 		if (!update_info.dfu_string &&
-		    !strcasecmp(info.name, EXYNOS_BOOT_PARTITION)) {
+		    (!strcasecmp(info.name, EXYNOS_BOOT_PARTITION) ||
+		     !strcasecmp(info.name, "boot_a") ||
+		     !strcasecmp(info.name, "boot_b"))) {
 			snprintf(dfu_string, sizeof(dfu_string),
-				 "mmc %d=u-boot.bin part %d %d", blk_dev,
-				 blk_dev, i);
+				 "%s %d=u-boot.bin part %d %d", blk_ifname,
+				 blk_dev, blk_dev, i);
 			update_info.dfu_string = dfu_string;
 		}
 
@@ -306,14 +348,24 @@ static int exynos_fastboot_setup(void)
 
 	/* Allocate and define buffer address for fastboot interface. */
 	if (lmb_alloc(CONFIG_FASTBOOT_BUF_SIZE, &addr)) {
-		log_err("%s: failed to allocate fastboot buffer\n", __func__);
-		return -ENOMEM;
+		log_warning("%s: failed to allocate fastboot buffer via LMB, using default 0x%lx\n",
+			    __func__, (ulong)CONFIG_FASTBOOT_BUF_ADDR);
+		addr = CONFIG_FASTBOOT_BUF_ADDR;
 	}
 	env_set_hex("fastboot_addr_r", addr);
 
+#if IS_ENABLED(CONFIG_FASTBOOT_FLASH_MMC)
 	blk_dev = blk_get_dev("mmc", CONFIG_FASTBOOT_FLASH_MMC_DEV);
+#elif IS_ENABLED(CONFIG_FASTBOOT_FLASH_BLOCK)
+	blk_dev = blk_get_dev(CONFIG_FASTBOOT_FLASH_BLOCK_INTERFACE_NAME,
+			      CONFIG_FASTBOOT_FLASH_BLOCK_DEVICE_ID);
+#else
+	blk_dev = blk_get_dev("mmc", 0);
+#endif
+	if (!blk_dev)
+		blk_dev = blk_get_dev("scsi", 0);
 	if (!blk_dev) {
-		log_warning("%s: mmc device not available, fastboot flash/erase will have no storage backing\n",
+		log_warning("%s: storage device not available, fastboot flash/erase will have no storage backing\n",
 			    __func__);
 		return 0;
 	}
@@ -322,7 +374,10 @@ static int exynos_fastboot_setup(void)
 		if (part_get_info(blk_dev, i, &info))
 			continue;
 
-		if (!strcasecmp(info.name, EXYNOS_BOOT_PARTITION)) {
+		if (!boot_found &&
+		    (!strcasecmp(info.name, EXYNOS_BOOT_PARTITION) ||
+		     !strcasecmp(info.name, "boot_a") ||
+		     !strcasecmp(info.name, "boot_b"))) {
 			env_set("fastboot_partition_alias_boot", info.name);
 			boot_found = true;
 		}
@@ -334,9 +389,8 @@ static int exynos_fastboot_setup(void)
 	}
 
 	if (!boot_found || !userdata_found) {
-		log_err("%s: required BOOT/USERDATA partition aliases missing\n",
-			__func__);
-		return -ENOENT;
+		log_warning("%s: required BOOT/USERDATA partition aliases missing (boot=%d, userdata=%d)\n",
+			    __func__, boot_found, userdata_found);
 	}
 
 	/* Expose the fixed policy as a read-only fastboot getvar. */
@@ -477,9 +531,122 @@ int timer_init(void)
 	return 0;
 }
 
+#include <video_font_ter32x64.h>
+
+const char *exynos_current_initcall = "none";
+int exynos_initcall_step = 0;
+
+void exynos_draw_text(int x0, int y0, const char *str, u32 fg, u32 bg)
+{
+	volatile u32 *fb = (volatile u32 *)0xed000000;
+	int cur_x = x0;
+	int cur_y = y0;
+
+	while (*str) {
+		char c = *str++;
+		if (c == '\n') {
+			cur_y += 68;
+			cur_x = x0;
+			continue;
+		}
+		if ((unsigned char)c >= 256)
+			c = '?';
+		const unsigned char *glyph = &video_fontdata_32x64[(unsigned char)c * 256];
+		for (int row = 0; row < 64; row++) {
+			int fb_y = cur_y + row;
+			if (fb_y < 0 || fb_y >= 2520)
+				continue;
+			for (int b = 0; b < 4; b++) {
+				unsigned char byte = glyph[row * 4 + b];
+				for (int bit = 0; bit < 8; bit++) {
+					int fb_x = cur_x + b * 8 + bit;
+					if (fb_x < 0 || fb_x >= 1080)
+						continue;
+					fb[fb_y * 1080 + fb_x] = (byte & (0x80 >> bit)) ? fg : bg;
+				}
+			}
+		}
+		cur_x += 32;
+		if (cur_x + 32 > 1080) {
+			cur_x = x0;
+			cur_y += 68;
+		}
+	}
+}
+
+static void int_to_str(int v, char *out)
+{
+	int p = 0;
+	if (v < 0) {
+		out[p++] = '-';
+		v = -v;
+	}
+	char tmp[16];
+	int tp = 0;
+	if (v == 0) {
+		tmp[tp++] = '0';
+	} else {
+		while (v > 0 && tp < 15) {
+			tmp[tp++] = '0' + (v % 10);
+			v /= 10;
+		}
+	}
+	while (tp > 0)
+		out[p++] = tmp[--tp];
+	out[p] = '\0';
+}
+
+void exynos_report_initcall_step(const char *name, int step)
+{
+	exynos_current_initcall = name;
+	if (gd->flags & GD_FLG_RELOC) {
+		char line[34];
+		int i;
+		for (i = 0; i < 32; i++)
+			line[i] = ' ';
+		line[32] = '\0';
+		for (i = 0; i < 32 && name[i]; i++)
+			line[i] = name[i];
+		exynos_draw_text(30, 80, line, 0x00FFFFFF, 0x00000000);
+	}
+}
+
+void exynos_report_initcall_fail(const char *name, int step, int ret)
+{
+	char ret_str[16];
+	char step_str[16];
+	char detail[64];
+
+	int_to_str(ret, ret_str);
+	int_to_str(step, step_str);
+
+	int lp = 0;
+	const char *s = "ret=";
+	while (*s) detail[lp++] = *s++;
+	s = ret_str;
+	while (*s) detail[lp++] = *s++;
+	s = " step=";
+	while (*s) detail[lp++] = *s++;
+	s = step_str;
+	while (*s) detail[lp++] = *s++;
+	detail[lp] = '\0';
+
+	exynos_draw_text(30, 200, "INITCALL FAILED:", 0x00FF3333, 0x00000000);
+	exynos_draw_text(30, 280, name, 0x00FFFF00, 0x00000000);
+	exynos_draw_text(30, 360, detail, 0x0000FFFF, 0x00000000);
+}
+
 int board_early_init_f(void)
 {
 	exynos_parse_dram_banks(gd->fdt_blob);
+
+	/* Visual milestone 1: RED stripe at top of framebuffer (0xed000000) */
+	if (of_machine_is_compatible("samsung,exynos9610") ||
+	    of_machine_is_compatible("motorola,troika")) {
+		volatile u32 *fb = (volatile u32 *)0xed000000;
+		for (int i = 0; i < 1080 * 40; i++)
+			fb[i] = 0x00FF0000;
+	}
 
 	return 0;
 }
@@ -487,6 +654,14 @@ int board_early_init_f(void)
 int dram_init(void)
 {
 	unsigned int i;
+
+	/* Visual milestone 2: YELLOW stripe */
+	if (of_machine_is_compatible("samsung,exynos9610") ||
+	    of_machine_is_compatible("motorola,troika")) {
+		volatile u32 *fb = (volatile u32 *)0xed000000;
+		for (int i = 1080 * 40; i < 1080 * 80; i++)
+			fb[i] = 0x00FFFF00;
+	}
 
 	/* Select the largest RAM bank for U-Boot. */
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS; i++) {
@@ -513,6 +688,14 @@ int dram_init_banksize(void)
 
 int board_init(void)
 {
+	/* Visual milestone 3: GREEN stripe (indicates relocated C code running) */
+	if (of_machine_is_compatible("samsung,exynos9610") ||
+	    of_machine_is_compatible("motorola,troika")) {
+		volatile u32 *fb = (volatile u32 *)0xed000000;
+		for (int i = 1080 * 80; i < 1080 * 120; i++)
+			fb[i] = 0x0000FF00;
+	}
+
 	return 0;
 }
 

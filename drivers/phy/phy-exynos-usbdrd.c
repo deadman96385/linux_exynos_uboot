@@ -152,6 +152,7 @@
 enum exynos_usbdrd_phy_variant {
 	EXYNOS7870_USBDRD_PHY,
 	EXYNOS850_USBDRD_PHY,
+	EXYNOS9610_USBDRD_PHY,
 };
 
 /**
@@ -182,6 +183,8 @@ static void exynos_usbdrd_phy_isol(struct exynos_usbdrd_phy *phy_drd,
 
 	if (phy_drd->variant == EXYNOS7870_USBDRD_PHY)
 		mask = EXYNOS7870_PHY_ENABLE;
+	else if (phy_drd->variant == EXYNOS9610_USBDRD_PHY)
+		mask = 0x10003;
 
 	val = isolate ? 0 : mask;
 	regmap_update_bits(phy_drd->reg_pmu, EXYNOS_USBDRD_PHY_CONTROL,
@@ -485,6 +488,7 @@ static int exynos_usbdrd_phy_init(struct phy *phy)
 		exynos7870_usbdrd_utmi_init(phy);
 		break;
 	case EXYNOS850_USBDRD_PHY:
+	case EXYNOS9610_USBDRD_PHY:
 		exynos850_usbdrd_utmi_init(phy);
 		break;
 	default:
@@ -510,6 +514,7 @@ static int exynos_usbdrd_phy_exit(struct phy *phy)
 		exynos7870_usbdrd_utmi_exit(phy);
 		break;
 	case EXYNOS850_USBDRD_PHY:
+	case EXYNOS9610_USBDRD_PHY:
 		exynos850_usbdrd_utmi_exit(phy);
 		break;
 	default:
@@ -535,6 +540,11 @@ static int exynos_usbdrd_phy_power_on(struct phy *phy)
 	/* Power-on PHY */
 	exynos_usbdrd_phy_isol(phy_drd, false);
 
+	if (phy_drd->variant == EXYNOS9610_USBDRD_PHY) {
+		/* Enable USB CCI coherency in SYSREG_USB (0x13010700 |= (3 << 12)) */
+		setbits_le32((void *)0x13010700, 0x3 << 12);
+	}
+
 	return 0;
 }
 
@@ -543,6 +553,10 @@ static int exynos_usbdrd_phy_power_off(struct phy *phy)
 	struct exynos_usbdrd_phy *phy_drd = dev_get_priv(phy->dev);
 
 	dev_dbg(phy->dev, "Request to power_off usbdrd_phy phy\n");
+
+	if (phy_drd->variant == EXYNOS9610_USBDRD_PHY) {
+		clrbits_le32((void *)0x13010700, 0x3 << 12);
+	}
 
 	/* Power-off the PHY */
 	exynos_usbdrd_phy_isol(phy_drd, true);
@@ -623,6 +637,10 @@ static const struct udevice_id exynos_usbdrd_phy_of_match[] = {
 	{
 		.compatible = "samsung,exynos850-usbdrd-phy",
 		.data = EXYNOS850_USBDRD_PHY,
+	},
+	{
+		.compatible = "samsung,exynos9610-usbdrd-phy",
+		.data = EXYNOS9610_USBDRD_PHY,
 	},
 	{ }
 };

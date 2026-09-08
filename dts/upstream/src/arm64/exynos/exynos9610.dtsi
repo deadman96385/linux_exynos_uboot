@@ -49,15 +49,27 @@
 		reg = <0x10000000 0x100>;
 	};
 
+	timer {
+		compatible = "arm,armv8-timer";
+		clock-frequency = <26000000>;
+	};
+
+	pmu_system_controller: system-controller@11860000 {
+		compatible = "samsung,exynos9610-pmu", "samsung,exynos7-pmu", "syscon";
+		reg = <0x11860000 0x10000>;
+	};
+
 	cmu_peri: clock-controller@10030000 {
 		compatible = "samsung,exynos9610-cmu-peri";
 		reg = <0x10030000 0x8000>;
 		#clock-cells = <1>;
+		u-boot,dm-pre-reloc;
 	};
 
 	pinctrl_alive: pinctrl@11850000 {
 		compatible = "samsung,exynos9610-pinctrl";
 		reg = <0x11850000 0x1000>;
+		u-boot,dm-pre-reloc;
 	};
 
 	serial_0: serial@13820000 {
@@ -83,6 +95,46 @@
 			label = "Volume Down Key";
 			gpios = <&gpa1 6 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_VOLUMEDOWN>;
+		};
+	};
+
+	ufs: ufs@13520000 {
+		compatible = "samsung,exynos9610-ufs", "samsung,exynos7-ufs";
+		reg = <0x13520000 0x100>,
+		      <0x13521100 0x100>,
+		      <0x13510000 0x200>,
+		      <0x13530000 0x300>;
+		reg-names = "hci", "vs_hci", "unipro", "ufsp";
+		status = "okay";
+	};
+
+	usbdrd_phy: phy@131d0000 {
+		compatible = "samsung,exynos9610-usbdrd-phy";
+		reg = <0x131d0000 0x200>;
+		clocks = <&oscclk>, <&oscclk>;
+		clock-names = "phy", "ref";
+		samsung,pmu-syscon = <&pmu_system_controller>;
+		#phy-cells = <1>;
+		status = "okay";
+	};
+
+	usbdrd: usb@13200000 {
+		compatible = "samsung,exynos9610-dwusb3", "samsung,exynos850-dwusb3";
+		reg = <0x13200000 0x10000>;
+		ranges;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		status = "okay";
+
+		dwc3: dwc3@13200000 {
+			compatible = "snps,dwc3";
+			reg = <0x13200000 0x10000>;
+			dr_mode = "peripheral";
+			maximum-speed = "high-speed";
+			phys = <&usbdrd_phy 0>;
+			phy-names = "usb2-phy";
+			snps,dis-u2-freeclk-exists-quirk;
+			status = "okay";
 		};
 	};
 };

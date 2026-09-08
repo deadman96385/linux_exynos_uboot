@@ -22,6 +22,10 @@
  */
 void hang(void)
 {
+	extern void exynos_draw_text(int x0, int y0, const char *str, unsigned int fg, unsigned int bg);
+
+	exynos_draw_text(30, 840, "HANG() CALLED", 0x0000FFFF, 0x00000000);
+
 #if !defined(CONFIG_XPL_BUILD) || \
 		(CONFIG_IS_ENABLED(LIBCOMMON_SUPPORT) && \
 		 CONFIG_IS_ENABLED(SERIAL))

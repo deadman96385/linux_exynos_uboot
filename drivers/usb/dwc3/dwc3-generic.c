@@ -731,6 +731,7 @@ static const struct udevice_id dwc3_glue_ids[] = {
 	{ .compatible = "intel,tangier-dwc3" },
 	{ .compatible = "samsung,exynos7870-dwusb3" },
 	{ .compatible = "samsung,exynos850-dwusb3" },
+	{ .compatible = "samsung,exynos9610-dwusb3" },
 	{ }
 };
 
