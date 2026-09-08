@@ -211,7 +211,8 @@ static int ufshcd_send_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 			return -ETIMEDOUT;
 		}
 
-		if (enabled_intr_status & UFSHCD_ERROR_MASK) {
+		if ((enabled_intr_status & UFSHCD_ERROR_MASK) &&
+		    uic_cmd->command != UIC_CMD_DME_LINK_STARTUP) {
 			dev_err(hba->dev, "Error in status:%08x\n",
 				enabled_intr_status);
 
@@ -515,6 +516,7 @@ static int ufshcd_link_startup(struct ufs_hba *hba)
 		ufshcd_ops_link_startup_notify(hba, PRE_CHANGE);
 
 		ret = ufshcd_dme_link_startup(hba);
+		printf("ufshcd_link_startup: dme_link_startup = %d\n", ret);
 
 		/* check if device is detected by inter-connect layer */
 		if (!ret && !ufshcd_is_device_present(hba)) {
@@ -2229,12 +2231,14 @@ int ufshcd_probe(struct udevice *ufs_dev, struct ufs_hba_ops *hba_ops)
 	ufshcd_device_reset(hba);
 
 	err = ufshcd_hba_enable(hba);
+	printf("ufshcd_probe: hba_enable = %d\n", err);
 	if (err) {
 		dev_err(hba->dev, "Host controller enable failed\n");
 		return err;
 	}
 
 	err = ufs_start(hba);
+	printf("ufshcd_probe: ufs_start = %d\n", err);
 	if (err)
 		return err;
 
@@ -2282,6 +2286,7 @@ int ufs_probe(void)
 
 	for (i = 0;; i++) {
 		ret = uclass_get_device(UCLASS_UFS, i, &dev);
+		printf("ufs_probe: uclass_get_device(%d) = %d\n", i, ret);
 		if (ret == -ENODEV)
 			break;
 	}
