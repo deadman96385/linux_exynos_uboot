@@ -111,7 +111,7 @@ bool efi_gop_register_allowed(void)
 	 * S-Boot framebuffer to the EFI payload. Linux has a native Exynos
 	 * DECON/DSIM driver and must be the only DRM owner of the scanout.
 	 */
-	return !of_machine_is_compatible("samsung,j7y17lte");
+	return true; /* XNU uses the inherited framebuffer through GOP. */
 }
 
 /*
